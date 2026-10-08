@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-heading: 'Plus Jakarta Sans', var(--font-sans);
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Light Mode Tokens */
+    --bg-page: #f8fafc;
+    --bg-sidebar: #ffffff;
+    --bg-surface: #ffffff;
+    --bg-surface-elevated: #f1f5f9;
+    --bg-subtle: #f8fafc;
+    --bg-muted: #e2e8f0;
+    
+    --border-subtle: rgba(148, 163, 184, 0.28);
+    --border-strong: rgba(100, 116, 139, 0.38);
+
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+
+    --glass-bg: rgba(255, 255, 255, 0.88);
+    --glass-border: rgba(226, 232, 240, 0.9);
+    --glass-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
+    --accent-subtle: rgba(79, 70, 229, 0.1);
+  }
+
+  .dark {
+    /* Dark Mode Tokens */
+    --bg-page: #090d16;
+    --bg-sidebar: #0d1322;
+    --bg-surface: #0f172a;
+    --bg-surface-elevated: #1e293b;
+    --bg-subtle: rgba(30, 41, 59, 0.6);
+    --bg-muted: #334155;
+
+    --border-subtle: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.18);
+
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    --glass-bg: rgba(15, 23, 42, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.4);
+
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --accent-subtle: rgba(99, 102, 241, 0.15);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    min-height: 100%;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+
+  /* Ensure inputs and buttons center text accurately */
+  input, button, select, textarea {
+    font-family: inherit;
+    line-height: normal;
+  }
+
+  /* High-contrast, always-visible text selection across all inputs, textareas, and surfaces */
+  ::selection,
+  *::selection {
+    background-color: #4f46e5 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    text-shadow: none !important;
+  }
+
+  ::-moz-selection,
+  *::-moz-selection {
+    background-color: #4f46e5 !important;
+    color: #ffffff !important;
+    text-shadow: none !important;
+  }
+
+  input::selection, 
+  textarea::selection,
+  select::selection {
+    background-color: #4f46e5 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    text-shadow: none !important;
+  }
+
+  input::-moz-selection, 
+  textarea::-moz-selection,
+  select::-moz-selection {
+    background-color: #4f46e5 !important;
+    color: #ffffff !important;
+    text-shadow: none !important;
+  }
+}
+
+/* Glassmorphism and theme surfaces */
+.theme-bg-page {
+  background-color: var(--bg-page);
+}
+
+.theme-bg-sidebar {
+  background-color: var(--bg-sidebar);
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  color: var(--text-primary);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.glass-panel-elevated {
+  background: var(--bg-surface-elevated);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.25);
+  color: var(--text-primary);
+}
+
+/* Unified, perfectly centered inputs */
+.glass-input {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  line-height: 1.5;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+/* Badge alignment helper to keep text centered inside border */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Custom modern scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* Scanner target animation */
+@keyframes scanline {
+  0% { top: 4%; opacity: 0.8; }
+  50% { top: 92%; opacity: 1; }
+  100% { top: 4%; opacity: 0.8; }
+}
+
+.animate-scanline {
+  animation: scanline 2.5s ease-in-out infinite;
+}
+
+/* Touch friendly mobile utilities */
+.safe-bottom {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
