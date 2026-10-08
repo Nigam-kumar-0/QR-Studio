@@ -1913,30 +1913,32 @@ export default function HomePage({ onOpenScanner }) {
         </>
       ) : (
         /* Guest Banner: Informs unauthenticated users about account benefits */
-        <div className="glass-panel p-5 sm:p-8 rounded-3xl border border-indigo-200/80 dark:border-indigo-800/80 bg-gradient-to-br from-indigo-50/50 via-white to-indigo-50/20 dark:from-indigo-950/20 dark:via-slate-900/60 dark:to-slate-900/40 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6">
-          <div className="space-y-1.5 sm:space-y-2 text-center md:text-left">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-500/20 inline-flex items-center gap-1">
-              <Sparkles className="w-3 h-3" />
-              <span>Unlock Cloud Library & Dynamic Tracking</span>
-            </span>
-            <h3 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+        <div className="glass-panel p-5 sm:p-8 rounded-3xl border border-indigo-200/80 dark:border-indigo-800/80 bg-gradient-to-br from-indigo-50/50 via-white to-indigo-50/20 dark:from-indigo-950/20 dark:via-slate-900/60 dark:to-slate-900/40 shadow-sm flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-6 w-full">
+          <div className="w-full space-y-2 text-center md:text-left">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-200 dark:border-indigo-500/20 inline-flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span>Unlock Cloud Library & Dynamic Tracking</span>
+              </span>
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               Create an account to track scans and save your QR codes
             </h3>
-            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed">
               You can create and download standard QR codes for free without signing in. To unlock editable dynamic links, real-time scan analytics, and saving codes to your personal library, please sign in.
             </p>
           </div>
 
-          <div className="flex flex-col xs:flex-row items-center gap-2 sm:gap-2.5 w-full xs:w-auto shrink-0">
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full md:w-auto shrink-0">
             <Link
               to="/login"
-              className="w-full xs:w-auto h-9 sm:h-10 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto h-10 px-5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
             >
               Sign In
             </Link>
             <Link
               to="/signup"
-              className="w-full xs:w-auto h-9 sm:h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-sm shadow-indigo-600/30 flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-sm shadow-indigo-600/30 flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <span>Get Started Free</span>
               <ArrowRight className="w-3.5 h-3.5" />
