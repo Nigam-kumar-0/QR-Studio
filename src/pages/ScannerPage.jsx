@@ -5,7 +5,7 @@ import {
   Camera, Upload, Copy, Check, ExternalLink, 
   RotateCw, AlertCircle, CheckCircle2, History, 
   PlusCircle, StopCircle, ArrowRight, Sparkles,
-  QrCode, FileText, Globe, Wifi, UserCheck, Eye, EyeOff, Mail, Phone, Edit3
+  QrCode, FileText, Globe, Wifi, UserCheck, Eye, EyeOff, Mail, Phone, Edit3, CreditCard
 } from 'lucide-react';
 import { addScanHistoryItem, getScanHistory, getQRCodeById } from '../services/storageService';
 import { parseDynamicShortCode, getDynamicTarget } from '../utils/qrTypes';

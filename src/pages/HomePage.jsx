@@ -16,7 +16,7 @@ import {
   Download, Copy, BookmarkCheck, Check, Sparkles,
   Scan, ArrowRight, ArrowLeft, Zap, QrCode, Layers,
   BarChart3, ChevronRight, Eye, EyeOff, FolderKanban,
-  CheckCircle2, Sliders, Palette, LayoutTemplate, RotateCcw, Lock, AlertCircle, Edit3
+  CheckCircle2, Sliders, Palette, LayoutTemplate, RotateCcw, Lock, AlertCircle, Edit3, X
 } from 'lucide-react';
 
 export default function HomePage({ onOpenScanner }) {
