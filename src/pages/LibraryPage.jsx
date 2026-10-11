@@ -17,8 +17,14 @@ import {
 import { 
   Search, Filter, Star, MoreVertical, LayoutGrid, List, 
   PlusCircle, Trash2, Edit3, ExternalLink, Copy, Check, 
-  Zap, ArrowUpDown, QrCode, X, BarChart3, Download, Share2, Eye, Sparkles
+  Zap, ArrowUpDown, QrCode, X, BarChart3, Download, Share2, Eye, Sparkles,
+  Globe, Wifi, UserCheck, CreditCard, MessageCircle, Mail, Phone, MessageSquare, MapPin, Calendar, Lock, AlertCircle, Save
 } from 'lucide-react';
+import { 
+  encodeQRContent, 
+  getDynamicTarget, 
+  getStep1ValidationError 
+} from '../utils/qrTypes';
 
 export default function LibraryPage({ onEditQR, onNavigateCreate }) {
   const { user } = useAuth();
@@ -36,6 +42,14 @@ export default function LibraryPage({ onEditQR, onNavigateCreate }) {
   const modalPreviewRef = useRef(null);
   const [modalCopiedImage, setModalCopiedImage] = useState(false);
   const [modalCopiedLink, setModalCopiedLink] = useState(false);
+
+  // Quick Edit QR Data Modal State (Data-Only Edit)
+  const [editingDataQR, setEditingDataQR] = useState(null);
+  const [editDataForm, setEditDataForm] = useState({});
+  const [editName, setEditName] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+  const [editSuccessMsg, setEditSuccessMsg] = useState('');
 
   const loadQRs = async () => {
     setLoading(true);
@@ -136,6 +150,67 @@ export default function LibraryPage({ onEditQR, onNavigateCreate }) {
       navigator.clipboard.writeText(link);
       setModalCopiedLink(true);
       setTimeout(() => setModalCopiedLink(false), 2000);
+    }
+  };
+
+  // Quick Edit QR Data handlers (Updates data only, preserves visual design)
+  const handleOpenEditData = (e, qr) => {
+    e.stopPropagation();
+    setEditingDataQR(qr);
+    setEditName(qr.name || '');
+    const initialData = qr.data ? { ...qr.data } : {};
+    if (qr.type === 'url' && !initialData.url && (qr.destinationUrl || qr.encodedContent)) {
+      initialData.url = qr.destinationUrl || qr.encodedContent;
+    }
+    setEditDataForm(initialData);
+    setEditError(null);
+    setEditSuccessMsg('');
+  };
+
+  const handleEditFieldChange = (field, val) => {
+    if (editError) setEditError(null);
+    setEditDataForm(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleSaveEditedData = async () => {
+    if (!editingDataQR) return;
+    setEditError(null);
+
+    const validationError = getStep1ValidationError(editingDataQR.type, editDataForm);
+    if (validationError) {
+      setEditError(validationError);
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      const isDynamic = Boolean(editingDataQR.isDynamic);
+      const dynamicTarget = isDynamic ? getDynamicTarget(editingDataQR.type, editDataForm) : '';
+      const staticPayload = encodeQRContent(editingDataQR.type, editDataForm);
+      const finalEncoded = isDynamic ? (editingDataQR.encodedContent || `${window.location.origin}/r/${editingDataQR.shortCode}`) : staticPayload;
+
+      const updatedRecord = {
+        ...editingDataQR,
+        name: editName.trim() || editingDataQR.name || 'My QR Code',
+        data: editDataForm,
+        encodedContent: finalEncoded,
+        destinationUrl: isDynamic ? dynamicTarget : (editingDataQR.destinationUrl || ''),
+        // Explicitly maintain existing config (frames, colors, dots, corners) 100% untouched
+        config: editingDataQR.config,
+      };
+
+      await saveQRCode(updatedRecord, user);
+      setEditSuccessMsg('QR Code data successfully updated!');
+      await loadQRs();
+      setTimeout(() => {
+        setEditingDataQR(null);
+        setEditSuccessMsg('');
+      }, 700);
+    } catch (err) {
+      console.error('Failed to save QR data:', err);
+      setEditError('Failed to save changes. Please try again.');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -452,19 +527,14 @@ export default function LibraryPage({ onEditQR, onNavigateCreate }) {
                         {copiedId === qr.id ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                       </button>
 
-                      {/* Edit */}
-                      {onEditQR && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEditQR(qr);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          title="Edit in Studio"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                      )}
+                      {/* Edit QR Data Only */}
+                      <button
+                        onClick={(e) => handleOpenEditData(e, qr)}
+                        className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                        title="Edit QR Data (Keep Design)"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
 
                       {/* Delete */}
                       <button
@@ -560,18 +630,14 @@ export default function LibraryPage({ onEditQR, onNavigateCreate }) {
                         {copiedId === qr.id ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                       </button>
                       
-                      {onEditQR && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEditQR(qr);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          title="Edit"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                      )}
+                      {/* Edit QR Data Only */}
+                      <button
+                        onClick={(e) => handleOpenEditData(e, qr)}
+                        className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                        title="Edit QR Data (Keep Design)"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
 
                       <button
                         onClick={(e) => handleDelete(e, qr)}
@@ -727,9 +793,571 @@ export default function LibraryPage({ onEditQR, onNavigateCreate }) {
             </div>
           )}
 
+          {/* Quick Edit QR Data Modal (Data-Only Edit — Preserves Design) */}
+          {editingDataQR && (
+            <div 
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+              onClick={() => setEditingDataQR(null)}
+            >
+              <div 
+                className="glass-panel w-full max-w-xl rounded-3xl p-5 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 relative my-auto bg-white/95 dark:bg-slate-900/95"
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => setEditingDataQR(null)}
+                  className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                {/* Header */}
+                <div className="space-y-1.5 pr-8">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-500/20">
+                      {editingDataQR.type}
+                    </span>
+                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" />
+                      Design & Colors Preserved
+                    </span>
+                    {editingDataQR.isDynamic && (
+                      <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-500/20 flex items-center gap-1">
+                        <Zap className="w-2.5 h-2.5" />
+                        Dynamic Redirect
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                    Edit QR Code Data
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Update content and target destination. Frames, colors, dots, and corners remain 100% untouched.
+                  </p>
+                </div>
+
+                {/* Feedback Alerts */}
+                {editError && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{editError}</span>
+                  </div>
+                )}
+
+                {editSuccessMsg && (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
+                    <Check className="w-4 h-4 shrink-0" />
+                    <span>{editSuccessMsg}</span>
+                  </div>
+                )}
+
+                {/* Form Inputs Container */}
+                <div className="space-y-4 max-h-[58vh] overflow-y-auto pr-1">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                      QR Code Label / Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      placeholder="My QR Code"
+                      className="w-full glass-input h-10 px-3 rounded-xl text-xs sm:text-sm font-medium"
+                    />
+                  </div>
+
+                  {renderTypeDataInputs(editingDataQR.type, editDataForm, handleEditFieldChange)}
+                </div>
+
+                {/* Dynamic notice if applicable */}
+                {editingDataQR.isDynamic && (
+                  <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/40 text-[11px] text-indigo-800 dark:text-indigo-300 space-y-0.5">
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Existing Printed Codes Keep Working</span>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Short link <code className="font-mono bg-white dark:bg-slate-800 px-1 py-0.5 rounded">/r/{editingDataQR.shortCode}</code> is retained. Scanning your QR code immediately opens this newly updated data without reprinting.
+                    </p>
+                  </div>
+                )}
+
+                {/* Footer Actions */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200/80 dark:border-slate-800/80">
+                  {onEditQR ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const qr = editingDataQR;
+                        setEditingDataQR(null);
+                        onEditQR(qr);
+                      }}
+                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Need to edit frame or colors? Open Studio &rarr;</span>
+                    </button>
+                  ) : <div />}
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setEditingDataQR(null)}
+                      className="h-10 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={editSaving}
+                      onClick={handleSaveEditedData}
+                      className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/25 transition-all cursor-pointer"
+                    >
+                      {editSaving ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Save QR Data</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 
     </div>
   );
+}
+
+// Helper to render type-specific data input fields for Quick Edit
+function renderTypeDataInputs(type, form, onChange) {
+  switch (type) {
+    case 'url':
+      return (
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Website URL *
+          </label>
+          <div className="flex items-center h-10 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-1">
+            <span className="px-2.5 text-xs font-semibold text-slate-400 select-none">https://</span>
+            <input
+              type="text"
+              value={(form.url || '').replace(/^https?:\/\//i, '')}
+              onChange={e => {
+                const val = e.target.value.replace(/^https?:\/\//i, '');
+                onChange('url', val.trim() ? 'https://' + val : '');
+              }}
+              placeholder="yourwebsite.com/page"
+              className="flex-1 h-full bg-transparent text-xs sm:text-sm font-medium outline-none text-slate-900 dark:text-slate-100"
+            />
+          </div>
+        </div>
+      );
+
+    case 'text':
+      return (
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Plain Text *
+          </label>
+          <textarea
+            rows={4}
+            value={form.text || ''}
+            onChange={e => onChange('text', e.target.value)}
+            placeholder="Enter raw text or notes..."
+            className="w-full glass-input p-3 rounded-xl text-xs sm:text-sm resize-none"
+          />
+        </div>
+      );
+
+    case 'wifi':
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Network Name (SSID) *</label>
+            <input
+              type="text"
+              value={form.ssid || ''}
+              onChange={e => onChange('ssid', e.target.value)}
+              placeholder="Home_WiFi"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Password</label>
+            <input
+              type="text"
+              value={form.password || ''}
+              onChange={e => onChange('password', e.target.value)}
+              placeholder="WiFi Password"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-mono"
+            />
+          </div>
+          <div className="sm:col-span-2 space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Security Type</label>
+            <select
+              value={form.encryption || 'WPA'}
+              onChange={e => onChange('encryption', e.target.value)}
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium cursor-pointer"
+            >
+              <option value="WPA">WPA/WPA2/WPA3 (Standard)</option>
+              <option value="WEP">WEP (Legacy)</option>
+              <option value="nopass">Open (No Password)</option>
+            </select>
+          </div>
+        </div>
+      );
+
+    case 'upi':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              UPI ID / VPA *
+            </label>
+            <input
+              type="text"
+              value={form.pa || ''}
+              onChange={e => onChange('pa', e.target.value)}
+              placeholder="merchant@okhdfcbank"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs sm:text-sm font-medium font-mono"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Payee Name</label>
+              <input
+                type="text"
+                value={form.pn || ''}
+                onChange={e => onChange('pn', e.target.value)}
+                placeholder="Merchant or Store Name"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Requested Amount (₹)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.am || ''}
+                onChange={e => onChange('am', e.target.value)}
+                placeholder="Optional preset amount"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Transaction Note</label>
+            <input
+              type="text"
+              value={form.tn || ''}
+              onChange={e => onChange('tn', e.target.value)}
+              placeholder="e.g. Order #1042"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+        </div>
+      );
+
+    case 'vcard':
+      return (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">First Name</label>
+              <input
+                type="text"
+                value={form.firstName || ''}
+                onChange={e => onChange('firstName', e.target.value)}
+                placeholder="John"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Last Name</label>
+              <input
+                type="text"
+                value={form.lastName || ''}
+                onChange={e => onChange('lastName', e.target.value)}
+                placeholder="Doe"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Phone</label>
+              <input
+                type="tel"
+                value={form.phone || ''}
+                onChange={e => onChange('phone', e.target.value)}
+                placeholder="+1 555 123 4567"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Email</label>
+              <input
+                type="email"
+                value={form.email || ''}
+                onChange={e => onChange('email', e.target.value)}
+                placeholder="john@company.com"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Organization</label>
+              <input
+                type="text"
+                value={form.organization || ''}
+                onChange={e => onChange('organization', e.target.value)}
+                placeholder="Acme Corp"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Title</label>
+              <input
+                type="text"
+                value={form.title || ''}
+                onChange={e => onChange('title', e.target.value)}
+                placeholder="Product Director"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs"
+              />
+            </div>
+          </div>
+        </div>
+      );
+
+    case 'whatsapp':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Phone Number (with Country Code) *</label>
+            <input
+              type="tel"
+              value={form.phone || ''}
+              onChange={e => onChange('phone', e.target.value)}
+              placeholder="+919876543210"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Pre-filled Message</label>
+            <textarea
+              rows={3}
+              value={form.message || ''}
+              onChange={e => onChange('message', e.target.value)}
+              placeholder="Hi, I would like to inquire about..."
+              className="w-full glass-input p-3 rounded-xl text-xs resize-none"
+            />
+          </div>
+        </div>
+      );
+
+    case 'email':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Recipient Email *</label>
+            <input
+              type="email"
+              value={form.email || ''}
+              onChange={e => onChange('email', e.target.value)}
+              placeholder="support@company.com"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Subject</label>
+            <input
+              type="text"
+              value={form.subject || ''}
+              onChange={e => onChange('subject', e.target.value)}
+              placeholder="Customer Inquiry"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Body</label>
+            <textarea
+              rows={3}
+              value={form.body || ''}
+              onChange={e => onChange('body', e.target.value)}
+              placeholder="Type message body..."
+              className="w-full glass-input p-3 rounded-xl text-xs resize-none"
+            />
+          </div>
+        </div>
+      );
+
+    case 'phone':
+      return (
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Phone Number *</label>
+          <input
+            type="tel"
+            value={form.phone || ''}
+            onChange={e => onChange('phone', e.target.value)}
+            placeholder="+1 800 555 0199"
+            className="w-full glass-input h-10 px-3 rounded-xl text-xs sm:text-sm font-medium"
+          />
+        </div>
+      );
+
+    case 'sms':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Phone Number *</label>
+            <input
+              type="tel"
+              value={form.phone || ''}
+              onChange={e => onChange('phone', e.target.value)}
+              placeholder="+1 800 555 0199"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Message</label>
+            <textarea
+              rows={3}
+              value={form.message || ''}
+              onChange={e => onChange('message', e.target.value)}
+              placeholder="Type SMS text..."
+              className="w-full glass-input p-3 rounded-xl text-xs resize-none"
+            />
+          </div>
+        </div>
+      );
+
+    case 'social':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Platform</label>
+            <select
+              value={form.platform || 'instagram'}
+              onChange={e => onChange('platform', e.target.value)}
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium cursor-pointer"
+            >
+              <option value="instagram">Instagram (@handle)</option>
+              <option value="twitter">X / Twitter (@handle)</option>
+              <option value="linkedin">LinkedIn (/in/handle)</option>
+              <option value="youtube">YouTube (@handle)</option>
+              <option value="github">GitHub (/username)</option>
+              <option value="tiktok">TikTok (@handle)</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Username / Handle *</label>
+            <input
+              type="text"
+              value={form.username || ''}
+              onChange={e => onChange('username', e.target.value)}
+              placeholder="myhandle"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+        </div>
+      );
+
+    case 'event':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Event Title *</label>
+            <input
+              type="text"
+              value={form.title || ''}
+              onChange={e => onChange('title', e.target.value)}
+              placeholder="Product Launch 2026"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Location</label>
+            <input
+              type="text"
+              value={form.location || ''}
+              onChange={e => onChange('location', e.target.value)}
+              placeholder="Convention Center Hall A"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Start Time</label>
+              <input
+                type="datetime-local"
+                value={form.startDate || ''}
+                onChange={e => onChange('startDate', e.target.value)}
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">End Time</label>
+              <input
+                type="datetime-local"
+                value={form.endDate || ''}
+                onChange={e => onChange('endDate', e.target.value)}
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+              />
+            </div>
+          </div>
+        </div>
+      );
+
+    case 'location':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Location Query / Address *</label>
+            <input
+              type="text"
+              value={form.query || ''}
+              onChange={e => onChange('query', e.target.value)}
+              placeholder="Times Square, New York"
+              className="w-full glass-input h-10 px-3 rounded-xl text-xs font-medium"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Latitude (optional)</label>
+              <input
+                type="text"
+                value={form.latitude || ''}
+                onChange={e => onChange('latitude', e.target.value)}
+                placeholder="40.7580"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Longitude (optional)</label>
+              <input
+                type="text"
+                value={form.longitude || ''}
+                onChange={e => onChange('longitude', e.target.value)}
+                placeholder="-73.9855"
+                className="w-full glass-input h-10 px-3 rounded-xl text-xs font-mono"
+              />
+            </div>
+          </div>
+        </div>
+      );
+
+    default:
+      return null;
+  }
 }

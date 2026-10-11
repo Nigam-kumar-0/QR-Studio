@@ -106,6 +106,34 @@ export default function HomePage({ onOpenScanner }) {
     loadData();
   }, [user]);
 
+  // Template Gallery modal state in Step 2
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
+  const [galleryCategory, setGalleryCategory] = useState('all');
+  const [templateAppliedToast, setTemplateAppliedToast] = useState('');
+
+  // Auto-persist Step 1 data to sessionStorage so navigating between pages never loses entered data
+  useEffect(() => {
+    if (hasStep1Data && !editingQRId) {
+      try {
+        sessionStorage.setItem('qr_studio_draft_form', JSON.stringify({ qrType, formData, qrName }));
+      } catch (e) {}
+    }
+  }, [formData, qrType, qrName, hasStep1Data, editingQRId]);
+
+  // Restore draft if available and not editing an existing QR
+  useEffect(() => {
+    if (!location.state?.editQR && !location.state?.template) {
+      try {
+        const savedDraft = JSON.parse(sessionStorage.getItem('qr_studio_draft_form') || '{}');
+        if (savedDraft?.formData && isStep1Filled(savedDraft.qrType, savedDraft.formData)) {
+          setQrType(savedDraft.qrType);
+          setFormData(savedDraft.formData);
+          if (savedDraft.qrName && savedDraft.qrName !== 'My QR Code') setQrName(savedDraft.qrName);
+        }
+      } catch (e) {}
+    }
+  }, []);
+
   // Handle template or editQR passed via navigation state
   useEffect(() => {
     if (location.state?.template) {
@@ -125,28 +153,30 @@ export default function HomePage({ onOpenScanner }) {
     // Only adopt template name if user hasn't given a custom name
     setQrName(prev => (!prev || prev === 'My QR Code' || prev === 'Custom QR' ? (template.name || 'Custom QR') : prev));
 
-    const isCurrentFilled = isStep1Filled(qrType, formData);
+    // Check if user has entered data in Step 1
+    let userHasData = isStep1Filled(qrType, formData);
 
-    // If user has not filled data yet, or forceData is explicitly requested, sync type and template sample data
-    if (!isCurrentFilled || forceData) {
-      if (template.type) setQrType(template.type);
-      setFormData(prev => ({ ...prev, ...(template.data || {}) }));
-    } else {
-      // PRESERVE user's entered data (e.g. url, text, ssid, etc.) - DO NOT OVERRIDE!
-      setFormData(prev => {
-        const updated = { ...prev };
-        if (template.data) {
-          Object.keys(template.data).forEach(key => {
-            // Only populate fields that are currently empty
-            if (!updated[key] || (typeof updated[key] === 'string' && !updated[key].trim())) {
-              updated[key] = template.data[key];
-            }
-          });
+    // If current state appears empty, check if there is draft data in sessionStorage
+    if (!userHasData) {
+      try {
+        const savedDraft = JSON.parse(sessionStorage.getItem('qr_studio_draft_form') || '{}');
+        if (savedDraft?.formData && isStep1Filled(savedDraft.qrType, savedDraft.formData)) {
+          setQrType(savedDraft.qrType);
+          setFormData(savedDraft.formData);
+          if (savedDraft.qrName && savedDraft.qrName !== 'My QR Code') setQrName(savedDraft.qrName);
+          userHasData = true;
         }
-        return updated;
-      });
+      } catch (e) {}
     }
 
+    // STRICT PROTECTION: If user has entered data in Step 1, NEVER touch qrType or formData!
+    // Only populate template sample data if user hasn't entered any data at all AND forceData is true
+    if (!userHasData && forceData) {
+      if (template.type) setQrType(template.type);
+      setFormData(prev => ({ ...prev, ...(template.data || {}) }));
+    }
+
+    // Apply template visual design styling ONLY (wrapping over user's data)
     if (template.config) {
       setTemplateConfig(template.config);
       if (template.config.fgColor) setFgColor(template.config.fgColor);
@@ -165,6 +195,9 @@ export default function HomePage({ onOpenScanner }) {
       setFrameTitle('SCAN CODE');
       setFrameText('SCAN ME');
     }
+
+    setTemplateAppliedToast(`Applied "${template.name}" styling!`);
+    setTimeout(() => setTemplateAppliedToast(''), 3000);
   };
 
   const applyQRToEdit = (qr) => {
@@ -814,8 +847,17 @@ export default function HomePage({ onOpenScanner }) {
                 ) : (
                   <div className="p-3 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-xs text-slate-500">
                     <span className="flex items-center gap-1.5 text-[11px]">
-                      <Wifi className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">Hardware connection format (Static Mode)</span>
+                      {qrType === 'upi' ? (
+                        <>
+                          <CreditCard className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <span className="truncate">Direct UPI App Protocol (Static Payment QR for GPay, PhonePe, Paytm, BHIM)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wifi className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate">Hardware connection format (Static Mode)</span>
+                        </>
+                      )}
                     </span>
                     <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 shrink-0">
                       Static
@@ -1240,7 +1282,33 @@ export default function HomePage({ onOpenScanner }) {
                 )}
 
                 {/* Step 1 Navigation Action Bar */}
-                <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-end">
+                <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+                  {editingQRId ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={async () => {
+                          if (validateStep1()) {
+                            await handleSaveQR();
+                          }
+                        }}
+                        className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm shadow-emerald-600/25 transition-all cursor-pointer"
+                        title="Update QR data immediately while keeping current design config untouched"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Update Data Now (Keep Current Design)</span>
+                      </button>
+                    </div>
+                  ) : <div />}
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1277,13 +1345,28 @@ export default function HomePage({ onOpenScanner }) {
                         </span>
                       )}
                     </label>
-                    <Link
-                      to="/templates"
-                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!user) {
+                          navigate('/login', { state: { from: '/' } });
+                          return;
+                        }
+                        setShowGalleryModal(true);
+                      }}
+                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
                     >
+                      <Sparkles className="w-3 h-3 text-indigo-500" />
                       <span>Explore Gallery &rarr;</span>
-                    </Link>
+                    </button>
                   </div>
+
+                  {templateAppliedToast && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      <span>{templateAppliedToast}</span>
+                    </div>
+                  )}
 
                   {!user && (
                     <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs">
@@ -2034,6 +2117,164 @@ export default function HomePage({ onOpenScanner }) {
               <span>Get Started Free</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* IN-PAGE TEMPLATE GALLERY MODAL (PRESERVES STEP 1 INPUTS)   */}
+      {/* ========================================================= */}
+      {showGalleryModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200"
+          onClick={() => setShowGalleryModal(false)}
+        >
+          <div
+            className="glass-panel w-full max-w-4xl max-h-[90vh] rounded-3xl p-5 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 relative my-auto bg-white/95 dark:bg-slate-900/95 flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowGalleryModal(false)}
+              className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Header */}
+            <div className="space-y-1.5 pr-8 shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-500/20 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  Template Gallery
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/20">
+                  Preserves Your Step 1 Data
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+                Explore Designer QR Templates
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Pick any style below to apply frames, colors, and styling without losing or overwriting your entered Step 1 data.
+              </p>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0 no-scrollbar">
+              {[
+                { id: 'all', label: 'All Styles' },
+                { id: 'business', label: 'Business & Pro' },
+                { id: 'creative', label: 'Creative & Social' },
+                { id: 'payments', label: 'Payments & Retail' },
+                { id: 'events', label: 'Events & Dining' },
+                { id: 'minimal', label: 'Minimalist' },
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setGalleryCategory(cat.id)}
+                  className={`h-8 px-3 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    galleryCategory === cat.id
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Templates Grid with Bespoke Previews */}
+            <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {QR_TEMPLATES
+                .filter(t => {
+                  if (galleryCategory === 'all') return true;
+                  const cat = (t.category || '').toLowerCase();
+                  if (galleryCategory === 'business') return cat.includes('business') || cat.includes('corporate') || cat.includes('tech');
+                  if (galleryCategory === 'creative') return cat.includes('social') || cat.includes('creator') || cat.includes('creative');
+                  if (galleryCategory === 'payments') return cat.includes('payment') || cat.includes('retail') || cat.includes('offer');
+                  if (galleryCategory === 'events') return cat.includes('event') || cat.includes('dining') || cat.includes('hospitality');
+                  if (galleryCategory === 'minimal') return cat.includes('minimal') || cat.includes('modern');
+                  return true;
+                })
+                .map(t => {
+                  const isSelected = qrName === t.name;
+
+                  return (
+                    <div
+                      key={t.id}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 relative ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-500/10 ring-2 ring-indigo-500/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:border-indigo-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                          {t.category}
+                        </span>
+                        {t.badge && (
+                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                            {t.badge}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Visual Live Preview */}
+                      <div 
+                        className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-center my-1"
+                        style={{
+                          backgroundColor: t.config.bgColor === '#ffffff' ? '#ffffff' : (t.config.bgColor || '#ffffff')
+                        }}
+                      >
+                        <QRPreview
+                          content={rawContent || encodeQRContent(t.type, t.data)}
+                          config={t.config}
+                          size={120}
+                          showReliability={false}
+                        />
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {t.name}
+                        </h3>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">
+                          {t.description}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          applyTemplate(t);
+                          setShowGalleryModal(false);
+                        }}
+                        className="w-full h-9 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Apply This Style</span>
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Applying a template style only updates frames and colors — your Step 1 content is retained.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowGalleryModal(false)}
+                className="h-9 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}

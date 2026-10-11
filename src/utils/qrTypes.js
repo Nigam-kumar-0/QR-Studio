@@ -241,8 +241,9 @@ export function encodeQRContent(type, data) {
 }
 
 // Types that can be dynamic with trackable redirection & editable destinations
+// Note: 'wifi' and 'upi' are direct static protocols so phone cameras and payment apps (GPay, PhonePe, Paytm) trigger immediate actions without browser redirects
 export const DYNAMIC_CAPABLE_TYPES = [
-  'url', 'social', 'whatsapp', 'location', 'upi', 
+  'url', 'social', 'whatsapp', 'location', 
   'email', 'phone', 'sms', 'event', 'vcard', 'text'
 ];
 

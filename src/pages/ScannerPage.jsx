@@ -43,6 +43,7 @@ export default function ScannerPage() {
   const detectType = (str) => {
     if (/^https?:\/\//i.test(str)) return 'url';
     if (/^WIFI:/i.test(str)) return 'wifi';
+    if (/^upi:\/\/pay/i.test(str)) return 'upi';
     if (/^tel:/i.test(str)) return 'phone';
     if (/^mailto:/i.test(str)) return 'email';
     if (/^BEGIN:VCARD/i.test(str)) return 'vcard';
@@ -76,6 +77,28 @@ export default function ScannerPage() {
         }
       } catch (err) {
         console.warn('Dynamic QR resolution error:', err);
+      }
+    }
+
+    // Direct static UPI parsing
+    if (!resolvedData && /^upi:\/\/pay/i.test(text)) {
+      try {
+        const urlObj = new URL(text);
+        const pa = urlObj.searchParams.get('pa') || '';
+        const pn = urlObj.searchParams.get('pn') || '';
+        const am = urlObj.searchParams.get('am') || '';
+        const tn = urlObj.searchParams.get('tn') || '';
+        resolvedData = {
+          content: text,
+          rawScanned: text,
+          isDynamicQR: false,
+          type: 'upi',
+          name: 'UPI Payment QR',
+          data: { pa, pn, am, tn },
+          timestamp: new Date().toISOString(),
+        };
+      } catch (e) {
+        // Fallback to standard detectType
       }
     }
 
@@ -450,7 +473,7 @@ export default function ScannerPage() {
                     )}
                   </div>
                 </div>
-              ) : scanResult.isDynamicQR && scanResult.type === 'upi' && scanResult.data ? (
+              ) : (scanResult.type === 'upi' && scanResult.data) ? (
                 /* UPI Payment Card */
                 <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
@@ -467,6 +490,12 @@ export default function ScannerPage() {
                     <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
                       <span>Requested Amount:</span>
                       <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">₹{scanResult.data.am}</span>
+                    </div>
+                  )}
+                  {scanResult.data.tn && (
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                      <span>Note:</span>
+                      <span className="text-slate-700 dark:text-slate-300">{scanResult.data.tn}</span>
                     </div>
                   )}
                 </div>
@@ -509,6 +538,16 @@ export default function ScannerPage() {
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied to Clipboard' : (scanResult.isDynamicQR ? 'Copy Dynamic Data' : 'Copy Content')}</span>
               </button>
+
+              {scanResult.type === 'upi' && (
+                <a
+                  href={scanResult.content}
+                  className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Pay via UPI App</span>
+                </a>
+              )}
 
               {(scanResult.type === 'url' || scanResult.content.startsWith('http')) && (
                 <a
