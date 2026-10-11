@@ -396,3 +396,102 @@ export function parseDynamicShortCode(scannedText) {
   }
   return null;
 }
+
+/**
+ * Returns tailored frame header and callout footer text for any QR type based on content.
+ */
+export function getTypeFrameDefaults(type, data = {}) {
+  switch (type) {
+    case 'url': {
+      let title = 'VISIT WEBSITE';
+      if (data?.url) {
+        try {
+          const host = new URL(data.url).hostname.replace(/^www\./i, '').toUpperCase();
+          if (host && host.length <= 25) title = host;
+        } catch (e) {}
+      }
+      return {
+        frameTitle: title,
+        frameText: 'SCAN TO OPEN LINK',
+      };
+    }
+
+    case 'whatsapp':
+      return {
+        frameTitle: 'WHATSAPP CHAT',
+        frameText: 'SCAN TO MESSAGE',
+      };
+
+    case 'wifi':
+      return {
+        frameTitle: data?.ssid ? `WI-FI • ${data.ssid.toUpperCase()}` : 'CONNECT TO WI-FI',
+        frameText: 'SCAN TO CONNECT',
+      };
+
+    case 'upi':
+      return {
+        frameTitle: data?.pn ? `${data.pn.toUpperCase()} • UPI` : 'INSTANT UPI PAY',
+        frameText: data?.am ? `SCAN & PAY ₹${data.am}` : 'SCAN & PAY ANY UPI APP',
+      };
+
+    case 'vcard': {
+      const name = `${data?.firstName || ''} ${data?.lastName || ''}`.trim();
+      return {
+        frameTitle: name ? name.toUpperCase() : 'DIGITAL CONTACT',
+        frameText: 'SCAN TO SAVE CONTACT',
+      };
+    }
+
+    case 'email':
+      return {
+        frameTitle: 'SEND EMAIL',
+        frameText: 'SCAN TO WRITE EMAIL',
+      };
+
+    case 'phone':
+      return {
+        frameTitle: data?.phone ? `CALL: ${data.phone}` : 'DIRECT CALL',
+        frameText: 'SCAN TO CALL NOW',
+      };
+
+    case 'sms':
+      return {
+        frameTitle: 'SEND SMS TEXT',
+        frameText: 'SCAN TO SEND MESSAGE',
+      };
+
+    case 'social': {
+      const platform = (data?.platform || 'SOCIAL').toUpperCase();
+      const username = data?.username ? `@${data.username.replace(/^@/, '')}` : 'PROFILE';
+      return {
+        frameTitle: `${platform} • ${username}`,
+        frameText: 'SCAN TO FOLLOW',
+      };
+    }
+
+    case 'event':
+      return {
+        frameTitle: data?.title ? data.title.toUpperCase() : 'CALENDAR EVENT',
+        frameText: 'SCAN TO ADD EVENT',
+      };
+
+    case 'location':
+      return {
+        frameTitle: data?.query ? data.query.toUpperCase() : 'VIEW LOCATION',
+        frameText: 'SCAN FOR DIRECTIONS',
+      };
+
+    case 'text':
+      return {
+        frameTitle: 'QUICK NOTE',
+        frameText: 'SCAN TO READ TEXT',
+      };
+
+    default:
+      return {
+        frameTitle: 'SCAN CODE',
+        frameText: 'SCAN ME',
+      };
+  }
+}
+

@@ -5,7 +5,7 @@ import {
   getAllScanEvents,
   saveQRCode
 } from '../services/storageService';
-import { encodeQRContent, isDynamicSupported, getDynamicTarget, isStep1Filled, getStep1ValidationError } from '../utils/qrTypes';
+import { encodeQRContent, isDynamicSupported, getDynamicTarget, isStep1Filled, getStep1ValidationError, getTypeFrameDefaults } from '../utils/qrTypes';
 import { QR_TEMPLATES } from '../utils/qrTemplates';
 import { exportAsPNG, exportAsSVG, exportAsPDF, copyQRImageToClipboard } from '../utils/qrExport';
 import { useAuth } from '../context/AuthContext';
@@ -73,11 +73,12 @@ export default function HomePage({ onOpenScanner }) {
   const [cornersSquareType, setCornersSquareType] = useState('extra-rounded');
   const [templateConfig, setTemplateConfig] = useState({});
 
-  // Custom Frame & Text State (User can write any text of their choice)
+  // Custom Frame & Text State (Dynamically tailored to QR type)
   const [frameType, setFrameType] = useState('none');
-  const [frameTitle, setFrameTitle] = useState('SCAN CODE');
-  const [frameText, setFrameText] = useState('SCAN ME');
+  const [frameTitle, setFrameTitle] = useState(() => getTypeFrameDefaults('url').frameTitle);
+  const [frameText, setFrameText] = useState(() => getTypeFrameDefaults('url').frameText);
   const [frameColor, setFrameColor] = useState('#4f46e5');
+  const [hasCustomEditedText, setHasCustomEditedText] = useState(false);
 
   // Action status
   const [saving, setSaving] = useState(false);
@@ -196,16 +197,23 @@ export default function HomePage({ onOpenScanner }) {
       if (template.config.dotsType) setDotsType(template.config.dotsType);
       if (template.config.cornersSquareType) setCornersSquareType(template.config.cornersSquareType);
 
-      // Populate editable custom frame & text from template
+      // Adopt template's frame silhouette and accent color
       setFrameType(template.config.frame || 'none');
-      setFrameTitle(template.config.frameTitle || 'SCAN CODE');
-      setFrameText(template.config.frameText || 'SCAN ME');
       setFrameColor(template.config.frameColor || template.config.fgColor || '#4f46e5');
+
+      // Dynamically compute header and footer matched to the user's active QR type and entered content!
+      const activeType = (!userHasData && forceData && template.type) ? template.type : (qrType || 'url');
+      const activeData = (!userHasData && forceData && template.data) ? template.data : formData;
+      const dynamicDefs = getTypeFrameDefaults(activeType, activeData);
+      setFrameTitle(dynamicDefs.frameTitle);
+      setFrameText(dynamicDefs.frameText);
+      setHasCustomEditedText(false);
     } else {
       setTemplateConfig({});
       setFrameType('none');
-      setFrameTitle('SCAN CODE');
-      setFrameText('SCAN ME');
+      const dynamicDefs = getTypeFrameDefaults(qrType || 'url', formData);
+      setFrameTitle(dynamicDefs.frameTitle);
+      setFrameText(dynamicDefs.frameText);
     }
 
     setTemplateAppliedToast(`Applied "${template.name}" styling!`);
@@ -783,6 +791,11 @@ export default function HomePage({ onOpenScanner }) {
                           onClick={() => {
                             if (step1Error) setStep1Error(null);
                             setQrType(t.id);
+                            if (!hasCustomEditedText) {
+                              const dynamicDefs = getTypeFrameDefaults(t.id, formData);
+                              setFrameTitle(dynamicDefs.frameTitle);
+                              setFrameText(dynamicDefs.frameText);
+                            }
                           }}
                           className={`h-12 sm:h-11 px-1 sm:px-2 rounded-xl text-xs font-semibold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center ${isSelected
                               ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500/50'
@@ -1314,6 +1327,11 @@ export default function HomePage({ onOpenScanner }) {
                     type="button"
                     onClick={() => {
                       if (validateStep1()) {
+                        if (!hasCustomEditedText) {
+                          const defs = getTypeFrameDefaults(qrType, formData);
+                          setFrameTitle(defs.frameTitle);
+                          setFrameText(defs.frameText);
+                        }
                         setCurrentStep(2);
                       }
                     }}
@@ -1484,8 +1502,11 @@ export default function HomePage({ onOpenScanner }) {
                           <input
                             type="text"
                             value={frameTitle}
-                            onChange={(e) => setFrameTitle(e.target.value)}
-                            placeholder="e.g. LE BISTRO • TABLE 14, VIP PASS, @myhandle"
+                            onChange={(e) => {
+                              setFrameTitle(e.target.value);
+                              setHasCustomEditedText(true);
+                            }}
+                            placeholder={getTypeFrameDefaults(qrType, formData).frameTitle}
                             className="w-full glass-input h-9 px-3 rounded-xl text-xs sm:text-sm font-medium"
                           />
                         </div>
@@ -1500,8 +1521,11 @@ export default function HomePage({ onOpenScanner }) {
                         <input
                           type="text"
                           value={frameText}
-                          onChange={(e) => setFrameText(e.target.value)}
-                          placeholder="e.g. SCAN ME, FOLLOW US, TAP TO ORDER, 50% OFF"
+                          onChange={(e) => {
+                            setFrameText(e.target.value);
+                            setHasCustomEditedText(true);
+                          }}
+                          placeholder={getTypeFrameDefaults(qrType, formData).frameText}
                           className="w-full glass-input h-9 px-3 rounded-xl text-xs sm:text-sm font-medium"
                         />
                       </div>
@@ -2230,8 +2254,12 @@ export default function HomePage({ onOpenScanner }) {
                         }}
                       >
                         <QRPreview
-                          content={rawContent || encodeQRContent(t.type, t.data)}
-                          config={t.config}
+                          content={rawContent || encodeQRContent(qrType || t.type, formData || t.data)}
+                          config={{
+                            ...t.config,
+                            frameTitle: getTypeFrameDefaults(qrType || t.type, formData).frameTitle,
+                            frameText: getTypeFrameDefaults(qrType || t.type, formData).frameText,
+                          }}
                           size={120}
                           showReliability={false}
                         />
