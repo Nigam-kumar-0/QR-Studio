@@ -111,6 +111,18 @@ export default function HomePage({ onOpenScanner }) {
   const [galleryCategory, setGalleryCategory] = useState('all');
   const [templateAppliedToast, setTemplateAppliedToast] = useState('');
 
+  // Compute final encoded payload & dynamic target
+  // Guests get basic high-quality static QR codes; dynamic links require an account
+  const canBeDynamic = isDynamicSupported(qrType);
+  const isCurrentlyDynamic = Boolean(user) && isDynamic && canBeDynamic;
+  const rawContent = encodeQRContent(qrType, formData);
+  const dynamicTarget = getDynamicTarget(qrType, formData);
+  const dynamicRedirectUrl = `${window.location.origin}/r/${shortCode}`;
+  
+  // Validate that required content is entered by the user
+  const hasStep1Data = isStep1Filled(qrType, formData);
+  const finalPayload = !hasStep1Data ? '' : (isCurrentlyDynamic ? dynamicRedirectUrl : rawContent);
+
   // Auto-persist Step 1 data to sessionStorage so navigating between pages never loses entered data
   useEffect(() => {
     if (hasStep1Data && !editingQRId) {
@@ -258,20 +270,9 @@ export default function HomePage({ onOpenScanner }) {
       description: '',
       query: '',
     });
+    sessionStorage.removeItem('qr_studio_draft_form');
     navigate('/', { replace: true, state: {} });
   };
-
-  // Compute final encoded payload & dynamic target
-  // Guests get basic high-quality static QR codes; dynamic links require an account
-  const canBeDynamic = isDynamicSupported(qrType);
-  const isCurrentlyDynamic = Boolean(user) && isDynamic && canBeDynamic;
-  const rawContent = encodeQRContent(qrType, formData);
-  const dynamicTarget = getDynamicTarget(qrType, formData);
-  const dynamicRedirectUrl = `${window.location.origin}/r/${shortCode}`;
-  
-  // Validate that required content is entered by the user
-  const hasStep1Data = isStep1Filled(qrType, formData);
-  const finalPayload = !hasStep1Data ? '' : (isCurrentlyDynamic ? dynamicRedirectUrl : rawContent);
 
   const validateStep1 = () => {
     const error = getStep1ValidationError(qrType, formData);
