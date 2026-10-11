@@ -5,9 +5,10 @@ import {
   Camera, Upload, Copy, Check, ExternalLink, 
   RotateCw, AlertCircle, CheckCircle2, History, 
   PlusCircle, StopCircle, ArrowRight, Sparkles,
-  QrCode, FileText, Globe, Wifi, UserCheck
+  QrCode, FileText, Globe, Wifi, UserCheck, Eye, EyeOff, Mail, Phone, Edit3
 } from 'lucide-react';
-import { addScanHistoryItem, getScanHistory } from '../services/storageService';
+import { addScanHistoryItem, getScanHistory, getQRCodeById } from '../services/storageService';
+import { parseDynamicShortCode, getDynamicTarget } from '../utils/qrTypes';
 
 export default function ScannerPage() {
   const navigate = useNavigate();
@@ -18,6 +19,9 @@ export default function ScannerPage() {
   const [currentCameraId, setCurrentCameraId] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [scanResult, setScanResult] = useState(null);
+  const [isResolving, setIsResolving] = useState(false);
+  const [showWifiPassword, setShowWifiPassword] = useState(false);
+  const [copiedShortLink, setCopiedShortLink] = useState(false);
   const [copied, setCopied] = useState(false);
   const [recentScans, setRecentScans] = useState([]);
 
@@ -45,17 +49,48 @@ export default function ScannerPage() {
     return 'text';
   };
 
-  const handleScanSuccess = (text) => {
-    const parsedType = detectType(text);
-    const resultObj = {
+  const handleScanSuccess = async (text) => {
+    stopCamera();
+    setIsResolving(true);
+    setErrorMsg('');
+
+    const shortCode = parseDynamicShortCode(text);
+    let resolvedData = null;
+
+    if (shortCode) {
+      try {
+        const qrRecord = await getQRCodeById(shortCode, { forceNetwork: true });
+        if (qrRecord) {
+          const dynamicDest = qrRecord.destinationUrl || getDynamicTarget(qrRecord.type, qrRecord.data) || qrRecord.encodedContent;
+          resolvedData = {
+            content: dynamicDest,
+            rawScanned: text,
+            isDynamicQR: true,
+            qrRecord,
+            name: qrRecord.name || 'Dynamic QR',
+            type: qrRecord.type || 'url',
+            shortCode: qrRecord.shortCode || shortCode,
+            data: qrRecord.data || {},
+            timestamp: new Date().toISOString(),
+          };
+        }
+      } catch (err) {
+        console.warn('Dynamic QR resolution error:', err);
+      }
+    }
+
+    const finalResult = resolvedData || {
       content: text,
-      type: parsedType,
+      rawScanned: text,
+      isDynamicQR: false,
+      type: detectType(text),
       timestamp: new Date().toISOString(),
     };
-    setScanResult(resultObj);
-    addScanHistoryItem(resultObj);
+
+    setScanResult(finalResult);
+    addScanHistoryItem(finalResult);
     loadRecentScans();
-    stopCamera();
+    setIsResolving(false);
   };
 
   const startCamera = async () => {
@@ -282,54 +317,220 @@ export default function ScannerPage() {
           </div>
         )}
 
+        {/* Resolving Dynamic Link Loading State */}
+        {isResolving && (
+          <div className="p-8 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 flex flex-col items-center justify-center text-center space-y-3 animate-fadeIn">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+              <Sparkles className="w-6 h-6 animate-spin" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Resolving Dynamic QR Destination...
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Fetching live destination data from QR Studio Cloud
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Active Scan Result Card */}
-        {scanResult ? (
-          <div className="p-6 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4" />
+        {!isResolving && scanResult && (
+          <div className="p-5 sm:p-7 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-5 animate-fadeIn">
+            {/* Header info row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-emerald-200/60 dark:border-emerald-800/40">
+              <div className="flex items-center gap-3">
+                <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-5 h-5" />
                 </span>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    QR Code Detected Successfully
-                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                      {scanResult.isDynamicQR ? scanResult.name : 'QR Code Scanned'}
+                    </h3>
+                    {scanResult.isDynamicQR && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30">
+                        Dynamic QR Resolved
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Saved to your local scan history
+                    {scanResult.isDynamicQR 
+                      ? 'Live destination data written inside this QR code'
+                      : 'Saved to your local scan history'}
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-700 dark:text-emerald-400 bg-white/80 dark:bg-slate-900 px-2 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-800">
+              
+              <span className="self-start sm:self-auto text-[10px] uppercase font-bold tracking-wider text-emerald-700 dark:text-emerald-400 bg-white/90 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 shadow-2xs">
                 {scanResult.type}
               </span>
             </div>
 
-            {/* Decoded content display */}
-            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-800 dark:text-slate-200 break-all select-all">
-              {scanResult.content}
+            {/* Resolved Content Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span>{scanResult.isDynamicQR ? 'Written Dynamic Data / Destination:' : 'Decoded QR Content:'}</span>
+                {scanResult.isDynamicQR && (
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                    Short Link: /r/{scanResult.shortCode}
+                  </span>
+                )}
+              </div>
+
+              {/* Wi-Fi Details Card */}
+              {scanResult.isDynamicQR && scanResult.type === 'wifi' && scanResult.data ? (
+                <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Network Name (SSID)</span>
+                      <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{scanResult.data.ssid || '(Unnamed Network)'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Security Encryption</span>
+                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{scanResult.data.encryption || 'WPA'}</span>
+                    </div>
+                  </div>
+                  {scanResult.data.password && (
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Password</span>
+                        <span className="font-mono text-sm text-slate-900 dark:text-slate-100 font-bold">
+                          {showWifiPassword ? scanResult.data.password : '••••••••••••'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowWifiPassword(!showWifiPassword)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 text-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          {showWifiPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          <span className="hidden sm:inline">{showWifiPassword ? 'Hide' : 'Show'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(scanResult.data.password);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                          className="p-1.5 px-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Password</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : scanResult.isDynamicQR && scanResult.type === 'vcard' && scanResult.data ? (
+                /* Contact Card */
+                <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
+                  <div className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    {[scanResult.data.firstName, scanResult.data.lastName].filter(Boolean).join(' ') || 'Contact Card'}
+                  </div>
+                  {scanResult.data.organization && (
+                    <div className="text-slate-500 dark:text-slate-400">
+                      {scanResult.data.organization} {scanResult.data.title ? `• ${scanResult.data.title}` : ''}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    {scanResult.data.phone && (
+                      <a href={`tel:${scanResult.data.phone}`} className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 shrink-0" />
+                        <span>{scanResult.data.phone}</span>
+                      </a>
+                    )}
+                    {scanResult.data.email && (
+                      <a href={`mailto:${scanResult.data.email}`} className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 shrink-0" />
+                        <span>{scanResult.data.email}</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : scanResult.isDynamicQR && scanResult.type === 'upi' && scanResult.data ? (
+                /* UPI Payment Card */
+                <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-semibold text-slate-400">Payee UPI VPA</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{scanResult.data.pa}</span>
+                  </div>
+                  {scanResult.data.pn && (
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                      <span>Payee Name:</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">{scanResult.data.pn}</span>
+                    </div>
+                  )}
+                  {scanResult.data.am && (
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                      <span>Requested Amount:</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">₹{scanResult.data.am}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Standard URL / Text Raw Content Display */
+                <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-800 dark:text-slate-200 break-all select-all">
+                  {scanResult.content}
+                </div>
+              )}
+
+              {/* Show original dynamic short redirect link if this is a dynamic QR */}
+              {scanResult.isDynamicQR && scanResult.rawScanned && (
+                <div className="p-2.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-800/40 flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-[10px] uppercase font-bold text-indigo-700 dark:text-indigo-400 shrink-0">Short Link:</span>
+                    <span className="font-mono text-slate-600 dark:text-slate-400 truncate text-[11px]">{scanResult.rawScanned}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(scanResult.rawScanned);
+                      setCopiedShortLink(true);
+                      setTimeout(() => setCopiedShortLink(false), 2000);
+                    }}
+                    className="px-2 py-1 rounded-md text-[11px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium shrink-0 cursor-pointer"
+                  >
+                    {copiedShortLink ? 'Copied' : 'Copy Short Link'}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+            <div className="flex flex-wrap items-center gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={copyToClipboard}
                 className="h-9 px-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Copied to Clipboard' : 'Copy Content'}</span>
+                <span>{copied ? 'Copied to Clipboard' : (scanResult.isDynamicQR ? 'Copy Dynamic Data' : 'Copy Content')}</span>
               </button>
 
-              {scanResult.type === 'url' && (
+              {(scanResult.type === 'url' || scanResult.content.startsWith('http')) && (
                 <a
                   href={scanResult.content}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                  className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open URL</span>
+                  <span>{scanResult.isDynamicQR ? 'Open Target URL' : 'Open URL'}</span>
                 </a>
+              )}
+
+              {scanResult.isDynamicQR && scanResult.qrRecord && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/', { state: { editQR: scanResult.qrRecord } })}
+                  className="h-9 px-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Edit in QR Studio</span>
+                </button>
               )}
 
               <button
@@ -341,7 +542,10 @@ export default function ScannerPage() {
               </button>
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* Scanner Inputs (Camera or File) - Shown when no active result and not resolving */}
+        {!scanResult && !isResolving && (
           <div>
             {/* Tab 1: Camera Scanner Mode */}
             {activeTab === 'camera' && (

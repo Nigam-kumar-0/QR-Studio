@@ -4,11 +4,13 @@ import {
   Camera, Upload, X, Copy, Check, ExternalLink, Zap, 
   RotateCw, AlertTriangle, Sparkles, PlusCircle 
 } from 'lucide-react';
-import { addScanHistoryItem } from '../services/storageService';
+import { addScanHistoryItem, getQRCodeById } from '../services/storageService';
+import { parseDynamicShortCode, getDynamicTarget } from '../utils/qrTypes';
 
 export default function QRScannerModal({ isOpen, onClose, onUseScannedData }) {
   const [activeTab, setActiveTab] = useState('camera'); // 'camera' | 'file'
   const [scanResult, setScanResult] = useState(null);
+  const [isResolving, setIsResolving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [cameras, setCameras] = useState([]);
@@ -117,18 +119,47 @@ export default function QRScannerModal({ isOpen, onClose, onUseScannedData }) {
     }
   };
 
-  const handleScanSuccess = (text) => {
-    const parsedType = detectType(text);
-    const resultObj = {
+  const handleScanSuccess = async (text) => {
+    stopCamera();
+    setIsResolving(true);
+    setErrorMsg('');
+
+    const shortCode = parseDynamicShortCode(text);
+    let resolvedData = null;
+
+    if (shortCode) {
+      try {
+        const qrRecord = await getQRCodeById(shortCode, { forceNetwork: true });
+        if (qrRecord) {
+          const dynamicDest = qrRecord.destinationUrl || getDynamicTarget(qrRecord.type, qrRecord.data) || qrRecord.encodedContent;
+          resolvedData = {
+            content: dynamicDest,
+            rawScanned: text,
+            isDynamicQR: true,
+            qrRecord,
+            name: qrRecord.name || 'Dynamic QR',
+            type: qrRecord.type || 'url',
+            shortCode: qrRecord.shortCode || shortCode,
+            data: qrRecord.data || {},
+            timestamp: new Date().toISOString(),
+          };
+        }
+      } catch (err) {
+        console.warn('Modal dynamic QR lookup error:', err);
+      }
+    }
+
+    const resultObj = resolvedData || {
       content: text,
-      type: parsedType,
+      rawScanned: text,
+      isDynamicQR: false,
+      type: detectType(text),
       timestamp: new Date().toISOString(),
     };
+
     setScanResult(resultObj);
     addScanHistoryItem(resultObj);
-
-    // Stop active camera on hit
-    stopCamera();
+    setIsResolving(false);
   };
 
   const handleFileUpload = async (e) => {
@@ -230,21 +261,45 @@ export default function QRScannerModal({ isOpen, onClose, onUseScannedData }) {
 
         {/* Content Area */}
         <div className="p-5 flex-1 overflow-y-auto">
-          {scanResult ? (
+          {isResolving ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                <Sparkles className="w-6 h-6 animate-spin" />
+              </div>
+              <p className="text-xs font-semibold text-slate-200">
+                Resolving live dynamic QR destination...
+              </p>
+            </div>
+          ) : scanResult ? (
             /* Result Card */
             <div className="flex flex-col items-center text-center py-2 animate-fadeIn">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3">
                 <Check className="w-7 h-7" />
               </div>
 
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                Detected: {scanResult.type.toUpperCase()}
-              </span>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  {scanResult.isDynamicQR ? scanResult.name : `Detected: ${scanResult.type.toUpperCase()}`}
+                </span>
+                {scanResult.isDynamicQR && (
+                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                    Dynamic
+                  </span>
+                )}
+              </div>
               
-              <div className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-4 my-4 text-left">
+              <div className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-4 my-3 text-left space-y-2">
+                <span className="text-[10px] uppercase font-semibold text-slate-400 block">
+                  {scanResult.isDynamicQR ? 'Written Destination / Dynamic Data' : 'Content'}
+                </span>
                 <p className="text-sm font-mono text-slate-200 break-all select-all line-clamp-4">
                   {scanResult.content}
                 </p>
+                {scanResult.isDynamicQR && scanResult.rawScanned && (
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                    <span className="truncate">Short Link: /r/{scanResult.shortCode}</span>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}

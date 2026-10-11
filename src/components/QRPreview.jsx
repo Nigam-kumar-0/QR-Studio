@@ -126,9 +126,10 @@ const QRPreview = forwardRef(({
     }
   }, [content, hasContent, config, size, reliability.errorCorrectionLevel]);
 
-  // Expose QR engine instance to parent for export operations
+  // Expose QR engine instance and current configuration to parent for export operations
   useImperativeHandle(ref, () => ({
     getInstance: () => qrCodeRef.current,
+    getConfig: () => config,
   }));
 
   const isDark = (function(hex) {

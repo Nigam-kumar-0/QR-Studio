@@ -115,9 +115,14 @@ export default function HistoryPage({ onOpenScanner, onUseScannedData }) {
               className="glass-panel p-4.5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 hover:border-indigo-400/50 dark:hover:border-slate-700 transition-all shadow-sm"
             >
               <div className="flex-1 min-w-0 space-y-1.5">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {item.name && (
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {item.name}
+                    </span>
+                  )}
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
-                    {item.type || 'Text'}
+                    {item.isDynamicQR ? `Dynamic ${item.type || 'QR'}` : (item.type || 'Text')}
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
                     <Clock className="w-3 h-3 text-slate-400" />
@@ -128,6 +133,11 @@ export default function HistoryPage({ onOpenScanner, onUseScannedData }) {
                 <p className="text-xs font-mono text-slate-900 dark:text-slate-100 break-all select-all line-clamp-2">
                   {item.content}
                 </p>
+                {item.isDynamicQR && item.shortCode && (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
+                    Short link: /r/{item.shortCode}
+                  </p>
+                )}
               </div>
 
               {/* Actions */}

@@ -382,3 +382,16 @@ export function getStep1ValidationError(type, data) {
   }
 }
 
+/**
+ * Extracts internal dynamic shortCode from a scanned string if it matches our /r/:shortCode pattern.
+ * Supports full URLs (http/https), relative paths, or direct /r/ codes.
+ */
+export function parseDynamicShortCode(scannedText) {
+  if (!scannedText || typeof scannedText !== 'string') return null;
+  const trimmed = scannedText.trim();
+  const match = trimmed.match(/(?:\/r\/)([a-zA-Z0-9_-]+)(?:[?#]|$)/i);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return null;
+}

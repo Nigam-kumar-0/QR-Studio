@@ -147,19 +147,19 @@ export default function QRDetailModal({ qrCode, isOpen, onClose, onEdit, onRefre
                 {/* Quick Export Buttons */}
                 <div className="grid grid-cols-3 gap-2 w-full mt-4">
                   <button
-                    onClick={() => exportAsPNG(previewRef.current?.getInstance(), qrCode.name, 1024)}
+                    onClick={() => exportAsPNG(previewRef.current, qrCode.name, 1024, qrCode.config)}
                     className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-800 text-center transition-colors cursor-pointer"
                   >
                     PNG
                   </button>
                   <button
-                    onClick={() => exportAsSVG(previewRef.current?.getInstance(), qrCode.name)}
+                    onClick={() => exportAsSVG(previewRef.current, qrCode.name, qrCode.config)}
                     className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-800 text-center transition-colors cursor-pointer"
                   >
                     SVG
                   </button>
                   <button
-                    onClick={() => exportAsPDF(previewRef.current?.getInstance(), qrCode.name, qrCode.destinationUrl)}
+                    onClick={() => exportAsPDF(previewRef.current, qrCode.name, qrCode.destinationUrl, qrCode.config)}
                     className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-800 text-center transition-colors cursor-pointer"
                   >
                     PDF

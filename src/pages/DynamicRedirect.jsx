@@ -34,49 +34,59 @@ export default function DynamicRedirect({ shortCode }) {
       return;
     }
 
-    // 1. Instant Synchronous Cache Check (0ms latency, zero flash!)
-    const cached = getQRCodeByIdSync(effectiveCode);
-    if (cached) {
-      if (cached.active === false) {
-        setErrorState('disabled');
-        return;
-      }
+    let isCancelled = false;
 
-      // Non-blocking background scan logging
-      recordScanEvent(cached.id).catch(() => {});
+    async function resolveAndRedirect() {
+      try {
+        let qr = null;
+        // When online, always query Firestore to get the latest destination, avoiding stale caching on phones
+        if (navigator.onLine) {
+          qr = await getQRCodeById(effectiveCode, { forceNetwork: true });
+        }
 
-      const target = cached.destinationUrl || getDynamicTarget(cached.type, cached.data) || cached.encodedContent;
-      if (target) {
-        executeFastRedirect(target);
-        return;
+        // If offline or network lookup did not succeed, fallback to local storage cache
+        if (!qr) {
+          qr = getQRCodeByIdSync(effectiveCode);
+        }
+
+        if (isCancelled) return;
+
+        if (!qr) {
+          setErrorState('not_found');
+          return;
+        }
+
+        if (qr.active === false) {
+          setErrorState('disabled');
+          return;
+        }
+
+        // Non-blocking background scan logging
+        recordScanEvent(qr.id).catch(() => {});
+
+        const target = qr.destinationUrl || getDynamicTarget(qr.type, qr.data) || qr.encodedContent;
+        if (target) {
+          executeFastRedirect(target);
+        } else {
+          setErrorState('not_found');
+        }
+      } catch (err) {
+        console.warn('Redirect lookup error, attempting offline cache:', err);
+        if (!isCancelled) {
+          const cached = getQRCodeByIdSync(effectiveCode);
+          if (cached && cached.active !== false) {
+            const target = cached.destinationUrl || getDynamicTarget(cached.type, cached.data) || cached.encodedContent;
+            if (target) {
+              executeFastRedirect(target);
+              return;
+            }
+          }
+          setErrorState('not_found');
+        }
       }
     }
 
-    // 2. Fast Network Lookup for first-time visitors / different devices
-    let isCancelled = false;
-    getQRCodeById(effectiveCode).then((found) => {
-      if (isCancelled) return;
-      if (!found) {
-        setErrorState('not_found');
-        return;
-      }
-      if (found.active === false) {
-        setErrorState('disabled');
-        return;
-      }
-
-      // Non-blocking background scan logging
-      recordScanEvent(found.id).catch(() => {});
-
-      const target = found.destinationUrl || getDynamicTarget(found.type, found.data) || found.encodedContent;
-      if (target) {
-        executeFastRedirect(target);
-      } else {
-        setErrorState('not_found');
-      }
-    }).catch(() => {
-      if (!isCancelled) setErrorState('not_found');
-    });
+    resolveAndRedirect();
 
     return () => {
       isCancelled = true;

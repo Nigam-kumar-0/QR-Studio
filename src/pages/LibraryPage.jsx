@@ -92,31 +92,27 @@ export default function LibraryPage({ onEditQR, onNavigateCreate }) {
 
   // Export handlers for the modal
   const handleDownloadPNG = async (qr) => {
-    const instance = modalPreviewRef.current?.getInstance();
-    if (instance) {
-      await exportAsPNG(instance, qr.name, 1024);
+    if (modalPreviewRef.current) {
+      await exportAsPNG(modalPreviewRef.current, qr.name, 1024, qr.config);
     }
   };
 
   const handleDownloadSVG = async (qr) => {
-    const instance = modalPreviewRef.current?.getInstance();
-    if (instance) {
-      await exportAsSVG(instance, qr.name);
+    if (modalPreviewRef.current) {
+      await exportAsSVG(modalPreviewRef.current, qr.name, qr.config);
     }
   };
 
   const handleDownloadPDF = async (qr) => {
-    const instance = modalPreviewRef.current?.getInstance();
-    if (instance) {
+    if (modalPreviewRef.current) {
       const details = qr.isDynamic ? `${window.location.origin}/r/${qr.shortCode}` : (qr.destinationUrl || qr.encodedContent);
-      await exportAsPDF(instance, qr.name, details);
+      await exportAsPDF(modalPreviewRef.current, qr.name, details, qr.config);
     }
   };
 
-  const handleCopyModalImage = async () => {
-    const instance = modalPreviewRef.current?.getInstance();
-    if (instance) {
-      const ok = await copyQRImageToClipboard(instance);
+  const handleCopyModalImage = async (qr) => {
+    if (modalPreviewRef.current) {
+      const ok = await copyQRImageToClipboard(modalPreviewRef.current, qr?.config || selectedQR?.config);
       if (ok) {
         setModalCopiedImage(true);
         setTimeout(() => setModalCopiedImage(false), 2000);

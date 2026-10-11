@@ -160,30 +160,36 @@ export function getQRCodeByIdSync(id) {
   return list.find(item => item.id === id || item.shortCode === id) || null;
 }
 
-export async function getQRCodeById(id) {
+export async function getQRCodeById(id, options = {}) {
   if (!id) return null;
+  const { forceNetwork = false } = options;
 
-  // 1. Instant check from local cache (0ms latency)
-  const localMatch = getQRCodeByIdSync(id);
-  if (localMatch) {
-    return localMatch;
+  // 1. Instant check from local cache (0ms latency) if not forcing fresh network lookup
+  if (!forceNetwork) {
+    const localMatch = getQRCodeByIdSync(id);
+    if (localMatch) {
+      return localMatch;
+    }
   }
 
-  // 2. Online Firestore Lookup
+  // 2. Online Firestore Lookup (fetches latest updated destination)
   const isOnline = isFirebaseConfigured() && db;
   if (isOnline) {
     try {
-      // First try direct document lookup
+      // First try direct document lookup by id
       const docRef = doc(db, 'qr_codes', id);
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const item = { ...snap.data(), id: snap.id };
-        // Cache to local storage
+        // Sync & update local storage cache with latest data
         const list = getLocal(LOCAL_QRS_KEY, []);
-        if (!list.some(q => q.id === item.id)) {
+        const idx = list.findIndex(q => q.id === item.id);
+        if (idx >= 0) {
+          list[idx] = item;
+        } else {
           list.unshift(item);
-          setLocal(LOCAL_QRS_KEY, list);
         }
+        setLocal(LOCAL_QRS_KEY, list);
         return item;
       }
 
@@ -197,12 +203,15 @@ export async function getQRCodeById(id) {
       if (!querySnap.empty) {
         const firstDoc = querySnap.docs[0];
         const item = { ...firstDoc.data(), id: firstDoc.id };
-        // Cache to local storage
+        // Sync & update local storage cache with latest data
         const list = getLocal(LOCAL_QRS_KEY, []);
-        if (!list.some(q => q.id === item.id)) {
+        const idx = list.findIndex(q => q.id === item.id);
+        if (idx >= 0) {
+          list[idx] = item;
+        } else {
           list.unshift(item);
-          setLocal(LOCAL_QRS_KEY, list);
         }
+        setLocal(LOCAL_QRS_KEY, list);
         return item;
       }
     } catch (e) {
@@ -210,7 +219,8 @@ export async function getQRCodeById(id) {
     }
   }
 
-  return null;
+  // 3. Fallback to local cache if offline or network query did not find document
+  return getQRCodeByIdSync(id);
 }
 
 export async function deleteQRCode(id, user) {
@@ -262,33 +272,61 @@ export async function toggleQRCodeFavorite(id) {
 }
 
 export async function updateDynamicDestination(id, newDestination, user) {
+  const isOnline = isFirebaseConfigured() && db;
   const list = getLocal(LOCAL_QRS_KEY, []);
-  const item = list.find(q => q.id === id);
-  if (!item) return false;
+  let item = list.find(q => q.id === id || q.shortCode === id);
+  const now = new Date().toISOString();
 
-  item.destinationUrl = newDestination;
-  item.data = { ...item.data, url: newDestination };
-  item.updatedAt = new Date().toISOString();
-  setLocal(LOCAL_QRS_KEY, list);
+  let docId = id;
 
-  if (isFirebaseConfigured() && db) {
+  if (isOnline) {
     try {
-      await updateDoc(doc(db, 'qr_codes', id), {
+      if (!item) {
+        // Find docId by shortCode query if item wasn't already in local storage
+        const q = query(collection(db, 'qr_codes'), where('shortCode', '==', id), limit(1));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          docId = querySnap.docs[0].id;
+          item = { ...querySnap.docs[0].data(), id: docId };
+        }
+      } else {
+        docId = item.id;
+      }
+
+      const updatedData = {
+        ...(item?.data || {}),
+        url: newDestination,
+      };
+
+      await updateDoc(doc(db, 'qr_codes', docId), {
         destinationUrl: newDestination,
-        data: item.data,
-        updatedAt: item.updatedAt
+        data: updatedData,
+        updatedAt: now,
       });
     } catch (e) {
       console.warn('Firestore destination update failed', e);
     }
   }
 
+  if (item) {
+    item.destinationUrl = newDestination;
+    item.data = { ...(item.data || {}), url: newDestination };
+    item.updatedAt = now;
+    const idx = list.findIndex(q => q.id === item.id);
+    if (idx >= 0) {
+      list[idx] = item;
+    } else {
+      list.unshift(item);
+    }
+    setLocal(LOCAL_QRS_KEY, list);
+  }
+
   logActivity({
-    userId: user?.uid || item.userId,
-    userEmail: user?.email || item.userEmail || 'guest@qrstudio.app',
+    userId: user?.uid || item?.userId || 'guest-user',
+    userEmail: user?.email || item?.userEmail || 'guest@qrstudio.app',
     type: 'DYNAMIC_DESTINATION_UPDATED',
-    details: `${item.name} -> ${newDestination}`,
-    qrId: id,
+    details: `${item?.name || 'QR Code'} -> ${newDestination}`,
+    qrId: docId,
   });
 
   return true;
@@ -432,7 +470,13 @@ export function addScanHistoryItem(item) {
   const newEntry = {
     id: 'scanned_' + Date.now(),
     content: item.content,
+    rawScanned: item.rawScanned || item.content,
     type: item.type || 'text',
+    name: item.name || null,
+    isDynamicQR: Boolean(item.isDynamicQR),
+    shortCode: item.shortCode || null,
+    destinationUrl: item.destinationUrl || null,
+    data: item.data || null,
     timestamp: new Date().toISOString(),
   };
   history.unshift(newEntry);

@@ -16,7 +16,7 @@ import {
   Download, Copy, BookmarkCheck, Check, Sparkles,
   Scan, ArrowRight, ArrowLeft, Zap, QrCode, Layers,
   BarChart3, ChevronRight, Eye, EyeOff, FolderKanban,
-  CheckCircle2, Sliders, Palette, LayoutTemplate, RotateCcw, Lock, AlertCircle
+  CheckCircle2, Sliders, Palette, LayoutTemplate, RotateCcw, Lock, AlertCircle, Edit3
 } from 'lucide-react';
 
 export default function HomePage({ onOpenScanner }) {
@@ -29,6 +29,10 @@ export default function HomePage({ onOpenScanner }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [step1Error, setStep1Error] = useState(null);
+
+  // Edit Mode state (when editing existing QR code from library)
+  const [editingQRId, setEditingQRId] = useState(null);
+  const [editingOriginalQR, setEditingOriginalQR] = useState(null);
 
   // QR Creator state
   const [qrType, setQrType] = useState('url');
@@ -164,6 +168,8 @@ export default function HomePage({ onOpenScanner }) {
   };
 
   const applyQRToEdit = (qr) => {
+    setEditingQRId(qr.id);
+    setEditingOriginalQR(qr);
     setQrName(qr.name || 'My QR Code');
     setQrType(qr.type || 'url');
     if (qr.data) {
@@ -185,6 +191,41 @@ export default function HomePage({ onOpenScanner }) {
       setFrameText(qr.config.frameText || 'SCAN ME');
       setFrameColor(qr.config.frameColor || qr.config.fgColor || '#4f46e5');
     }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingQRId(null);
+    setEditingOriginalQR(null);
+    setShortCode(Math.random().toString(36).substring(2, 7));
+    setQrName('My QR Code');
+    setFormData({
+      url: '',
+      text: '',
+      ssid: '',
+      password: '',
+      encryption: 'WPA',
+      firstName: '',
+      lastName: '',
+      organization: '',
+      phone: '',
+      email: '',
+      subject: '',
+      body: '',
+      message: '',
+      pa: '',
+      pn: '',
+      am: '',
+      tn: '',
+      platform: 'instagram',
+      username: '',
+      title: '',
+      location: '',
+      startDate: '',
+      endDate: '',
+      description: '',
+      query: '',
+    });
+    navigate('/', { replace: true, state: {} });
   };
 
   // Compute final encoded payload & dynamic target
@@ -239,6 +280,7 @@ export default function HomePage({ onOpenScanner }) {
         : (formData.title || (qrType === 'url' ? (formData.url ? new URL(formData.url).hostname : 'Website QR') : `${qrType.toUpperCase()} Code`));
 
       const record = {
+        id: editingQRId || undefined,
         name: qrName || derivedName || 'My QR Code',
         type: qrType,
         data: formData,
@@ -256,9 +298,12 @@ export default function HomePage({ onOpenScanner }) {
           frameColor,
         },
         isDynamic: isCurrentlyDynamic,
-        shortCode: isCurrentlyDynamic ? shortCode : null,
+        shortCode: isCurrentlyDynamic ? (editingOriginalQR?.shortCode || shortCode) : null,
         destinationUrl: isCurrentlyDynamic ? dynamicTarget : null,
-        active: true,
+        active: editingOriginalQR?.active !== undefined ? editingOriginalQR.active : true,
+        createdAt: editingOriginalQR?.createdAt || undefined,
+        scansCount: editingOriginalQR?.scansCount || 0,
+        favorite: editingOriginalQR?.favorite || false,
       };
 
       const result = await saveQRCode(record, user);
@@ -277,14 +322,23 @@ export default function HomePage({ onOpenScanner }) {
     }
   };
 
+  const getActiveExportConfig = () => ({
+    ...templateConfig,
+    frame: frameType,
+    frameTitle,
+    frameText,
+    frameColor,
+    bgColor,
+    fgColor,
+  });
+
   const handleDownloadPNG = async () => {
     if (!validateStep1()) {
       setCurrentStep(1);
       return;
     }
-    const instance = previewRef.current?.getInstance();
-    if (instance) {
-      await exportAsPNG(instance, qrName || 'qr-code', 1024);
+    if (previewRef.current) {
+      await exportAsPNG(previewRef.current, qrName || 'qr-code', 1024, getActiveExportConfig());
     }
   };
 
@@ -293,9 +347,8 @@ export default function HomePage({ onOpenScanner }) {
       setCurrentStep(1);
       return;
     }
-    const instance = previewRef.current?.getInstance();
-    if (instance) {
-      await exportAsSVG(instance, qrName || 'qr-code');
+    if (previewRef.current) {
+      await exportAsSVG(previewRef.current, qrName || 'qr-code', getActiveExportConfig());
     }
   };
 
@@ -304,10 +357,9 @@ export default function HomePage({ onOpenScanner }) {
       setCurrentStep(1);
       return;
     }
-    const instance = previewRef.current?.getInstance();
-    if (instance) {
+    if (previewRef.current) {
       const details = isCurrentlyDynamic ? dynamicRedirectUrl : (formData.url || dynamicTarget || finalPayload);
-      await exportAsPDF(instance, qrName || 'QR Code', details);
+      await exportAsPDF(previewRef.current, qrName || 'QR Code', details, getActiveExportConfig());
     }
   };
 
@@ -316,9 +368,8 @@ export default function HomePage({ onOpenScanner }) {
       setCurrentStep(1);
       return;
     }
-    const instance = previewRef.current?.getInstance();
-    if (instance) {
-      const ok = await copyQRImageToClipboard(instance);
+    if (previewRef.current) {
+      const ok = await copyQRImageToClipboard(previewRef.current, getActiveExportConfig());
       if (ok) {
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2000);
@@ -452,10 +503,12 @@ export default function HomePage({ onOpenScanner }) {
       <div className="flex items-center justify-between gap-2.5 pb-3 sm:pb-4 border-b border-slate-200 dark:border-slate-800">
         <div className="space-y-0.5 min-w-0">
           <h1 className="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 truncate">
-            Create QR Code
+            {editingQRId ? 'Edit QR Code' : 'Create QR Code'}
           </h1>
           <p className="text-[11px] sm:text-sm text-slate-500 dark:text-slate-400 truncate">
-            Follow simple steps to design, customize, and export custom QR codes
+            {editingQRId 
+              ? `Editing "${editingOriginalQR?.name || qrName}" — update destination and styles without breaking existing links`
+              : 'Follow simple steps to design, customize, and export custom QR codes'}
           </p>
         </div>
 
@@ -503,6 +556,37 @@ export default function HomePage({ onOpenScanner }) {
           </button>
         </div>
       </div>
+
+      {/* Active Edit Mode Banner */}
+      {editingQRId && (
+        <div className="p-3 sm:p-4 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Edit3 className="w-4 h-4" />
+            </span>
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs sm:text-sm font-bold text-indigo-950 dark:text-indigo-200 truncate">
+                  Editing: <span className="underline">{editingOriginalQR?.name || qrName}</span>
+                </span>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-200/60 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300">
+                  Update Mode
+                </span>
+              </div>
+              <p className="text-[11px] text-indigo-700/90 dark:text-indigo-300/80">
+                Updating will redirect scans to your new data while preserving short link <span className="font-mono font-semibold">/r/{shortCode}</span>.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCancelEdit}
+            className="h-8 px-3 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+          >
+            Cancel / New QR
+          </button>
+        </div>
+      )}
 
       {/* ========================================================= */}
       {/* 2. PROGRESSIVE WIZARD STEPPER BAR (Adaptive & Mobile)     */}
@@ -1570,24 +1654,31 @@ export default function HomePage({ onOpenScanner }) {
                 {/* Primary Action 1: Save QR to Library (Requires Login) */}
                 <div className="space-y-2">
                   {user ? (
-                    <button
-                      type="button"
-                      onClick={handleSaveQR}
-                      disabled={saving}
-                      className="w-full h-11 sm:h-12 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
-                    >
-                      {saveSuccess ? (
-                        <>
-                          <Check className="w-4 h-4 text-emerald-300" />
-                          <span>Saved Successfully to Library!</span>
-                        </>
-                      ) : (
-                        <>
-                          <BookmarkCheck className="w-4 h-4" />
-                          <span>{saving ? 'Saving...' : 'Save QR to Library'}</span>
-                        </>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleSaveQR}
+                        disabled={saving}
+                        className="w-full h-11 sm:h-12 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
+                      >
+                        {saveSuccess ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-300" />
+                            <span>{editingQRId ? 'Updated Successfully in Library!' : 'Saved Successfully to Library!'}</span>
+                          </>
+                        ) : (
+                          <>
+                            {editingQRId ? <Edit3 className="w-4 h-4" /> : <BookmarkCheck className="w-4 h-4" />}
+                            <span>{saving ? (editingQRId ? 'Updating...' : 'Saving...') : (editingQRId ? 'Update QR Code (Save Changes)' : 'Save QR to Library')}</span>
+                          </>
+                        )}
+                      </button>
+                      {editingQRId && (
+                        <p className="text-[11px] text-center text-indigo-600 dark:text-indigo-400 font-medium">
+                          Live destination will update immediately. Your short link /r/{shortCode} stays the same.
+                        </p>
                       )}
-                    </button>
+                    </>
                   ) : (
                     <button
                       type="button"
